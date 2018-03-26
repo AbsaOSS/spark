@@ -19,11 +19,16 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.lang.reflect.Modifier
 
+import java.util.Locale
+import javax.annotation.concurrent.GuardedBy
+
+import scala.collection.mutable
 import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -35,7 +40,10 @@ import org.apache.spark.sql.types._
 /**
  * A catalog for looking up user defined functions, used by an [[Analyzer]].
  *
- * Note: The implementation should be thread-safe to allow concurrent access.
+ * Note:
+ *   1) The implementation should be thread-safe to allow concurrent access.
+ *   2) the database name is always case-sensitive here, callers are responsible to
+ *      format the database name w.r.t. case-sensitive config.
  */
 trait FunctionRegistry {
 
@@ -301,7 +309,6 @@ object FunctionRegistry {
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
-    expression[StringReverse]("reverse"),
     expression[RLike]("rlike"),
     expression[StringRPad]("rpad"),
     expression[StringTrimRight]("rtrim"),
@@ -369,6 +376,8 @@ object FunctionRegistry {
     expression[MapValues]("map_values"),
     expression[Size]("size"),
     expression[SortArray]("sort_array"),
+    expression[Flatten]("flatten"),
+    expression[Reverse]("reverse"),
     CreateStruct.registryEntry,
 
     // misc functions
