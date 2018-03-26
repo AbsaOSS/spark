@@ -3137,6 +3137,14 @@ object functions {
     */
   def reverse(e: Column): Column = withExpr { Reverse(e.expr) }
 
+  /**
+    * Creates a single array from an array of arrays. If a structure of nested arrays is deeper than
+    * two levels, only one level of nesting is removed.
+    * @group collection_funcs
+    * @since 2.4.0
+    */
+  def flatten(e: Column): Column = withExpr { Flatten(e.expr) }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
 
