@@ -3143,27 +3143,27 @@ object functions {
   def sort_array(e: Column, asc: Boolean): Column = withExpr { SortArray(e.expr, lit(asc).expr) }
 
   /**
-    * Returns a reversed string or an array with reverse order of elements.
-    * @group collection_funcs
-    * @since 1.5.0
-    */
+   * Returns a reversed string or an array with reverse order of elements.
+   * @group collection_funcs
+   * @since 1.5.0
+   */
   def reverse(e: Column): Column = withExpr { Reverse(e.expr) }
 
   /**
-    * Creates a single array from an array of arrays. If a structure of nested arrays is deeper than
-    * two levels, only one level of nesting is removed.
-    * @group collection_funcs
-    * @since 2.4.0
-    */
+   * Creates a single array from an array of arrays. If a structure of nested arrays is deeper than
+   * two levels, only one level of nesting is removed.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
   def flatten(e: Column): Column = withExpr { Flatten(e.expr) }
 
   /**
-    * Transforms the input array by encapsulating elements into pairs
-    * with indexes indicating the order.
-    *
-    * @group collection_funcs
-    * @since 2.4.0
-    */
+   * Transforms the input array by encapsulating elements into pairs
+   * with indexes indicating the order.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
   def zip_with_index(e: Column, indexFirst: Boolean = false): Column = withExpr {
     ZipWithIndex(e.expr, Literal(indexFirst))
   }
