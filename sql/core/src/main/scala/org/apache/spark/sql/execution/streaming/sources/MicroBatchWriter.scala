@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources.v2.StreamWriterProgressCollector
 import org.apache.spark.sql.sources.v2.writer.{DataSourceWriter, DataWriterFactory, SupportsWriteInternalRow, WriterCommitMessage}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 
@@ -27,7 +28,8 @@ import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
  * the non-streaming interface, forwarding the batch ID determined at construction to a wrapped
  * streaming writer.
  */
-class MicroBatchWriter(batchId: Long, writer: StreamWriter) extends DataSourceWriter {
+class MicroBatchWriter(batchId: Long, writer: StreamWriter) extends DataSourceWriter
+  with StreamWriterProgressCollector {
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     writer.commit(batchId, messages)
   }
@@ -38,7 +40,7 @@ class MicroBatchWriter(batchId: Long, writer: StreamWriter) extends DataSourceWr
 }
 
 class InternalRowMicroBatchWriter(batchId: Long, writer: StreamWriter)
-  extends DataSourceWriter with SupportsWriteInternalRow {
+  extends DataSourceWriter with SupportsWriteInternalRow with StreamWriterProgressCollector {
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     writer.commit(batchId, messages)
   }

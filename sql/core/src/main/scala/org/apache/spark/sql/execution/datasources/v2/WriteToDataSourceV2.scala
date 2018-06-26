@@ -31,8 +31,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.MicroBatchExecution
 import org.apache.spark.sql.sources.v2.writer._
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriterCommitProgress
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{LongAccumulator, Utils}
 
 /**
  * The logical plan for writing data into data source v2.
@@ -58,6 +59,7 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
     val useCommitCoordinator = writer.useCommitCoordinator
     val rdd = query.execute()
     val messages = new Array[WriterCommitMessage](rdd.partitions.length)
+    val totalNumRowsAccumulator = new LongAccumulator()
 
     logInfo(s"Start processing data source writer: $writer. " +
       s"The input RDD has ${messages.length} partitions.")
@@ -68,15 +70,20 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
         (context: TaskContext, iter: Iterator[InternalRow]) =>
           DataWritingSparkTask.run(writeTask, context, iter, useCommitCoordinator),
         rdd.partitions.indices,
-        (index, message: WriterCommitMessage) => {
-          messages(index) = message
-          writer.onDataWriterCommit(message)
+        (index, result: DataWritingSparkTaskResult) => {
+          val commitMessage = result.writerCommitMessage
+          messages(index) = commitMessage
+          totalNumRowsAccumulator.add(result.numRows)
+          writer.onDataWriterCommit(commitMessage)
         }
       )
 
       logInfo(s"Data source writer $writer is committing.")
       writer.commit(messages)
       logInfo(s"Data source writer $writer committed.")
+      writer match {
+        case w: StreamWriterProgressCollector => w.setNumOutputRows(totalNumRowsAccumulator.value)
+      }
     } catch {
       case cause: Throwable =>
         logError(s"Data source writer $writer is aborting.")
@@ -105,7 +112,7 @@ object DataWritingSparkTask extends Logging {
       writeTask: DataWriterFactory[InternalRow],
       context: TaskContext,
       iter: Iterator[InternalRow],
-      useCommitCoordinator: Boolean): WriterCommitMessage = {
+      useCommitCoordinator: Boolean): DataWritingSparkTaskResult = {
     val stageId = context.stageId()
     val stageAttempt = context.stageAttemptNumber()
     val partId = context.partitionId()
@@ -114,9 +121,12 @@ object DataWritingSparkTask extends Logging {
     val epochId = Option(context.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)).getOrElse("0")
     val dataWriter = writeTask.createDataWriter(partId, taskId, epochId.toLong)
 
+    var count = 0L
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
       while (iter.hasNext) {
+        // Count is here.
+        count += 1
         dataWriter.write(iter.next())
       }
 
@@ -143,7 +153,7 @@ object DataWritingSparkTask extends Logging {
       logInfo(s"Committed partition $partId (task $taskId, attempt $attemptId" +
         s"stage $stageId.$stageAttempt)")
 
-      msg
+      DataWritingSparkTaskResult(count, msg)
 
     })(catchBlock = {
       // If there is an error, abort this writer
@@ -155,6 +165,8 @@ object DataWritingSparkTask extends Logging {
     })
   }
 }
+
+case class DataWritingSparkTaskResult(numRows: Long, writerCommitMessage: WriterCommitMessage)
 
 class InternalRowDataWriterFactory(
     rowWriterFactory: DataWriterFactory[Row],
@@ -179,3 +191,21 @@ class InternalRowDataWriter(rowWriter: DataWriter[Row], encoder: ExpressionEncod
 
   override def abort(): Unit = rowWriter.abort()
 }
+
+/**
+ * Collects commit progress on writers.
+*/
+trait StreamWriterProgressCollector {
+
+  private var numOutputRowsVar: Long = _
+
+  def progress(): StreamWriterCommitProgress = new StreamWriterCommitProgress {
+      override def numOutputRows(): java.lang.Long = numOutputRowsVar
+  }
+
+  def setNumOutputRows(numOutputRows: Long): Unit = {
+    numOutputRowsVar = numOutputRows
+  }
+
+}
+

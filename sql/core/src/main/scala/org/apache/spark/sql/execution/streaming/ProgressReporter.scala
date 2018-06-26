@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
 import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriterCommitProgress
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
@@ -56,6 +57,7 @@ trait ProgressReporter extends Logging {
   protected def logicalPlan: LogicalPlan
   protected def lastExecution: QueryExecution
   protected def newData: Map[BaseStreamingSource, LogicalPlan]
+  protected def sinkCommitProgress: Option[StreamWriterCommitProgress]
   protected def sources: Seq[BaseStreamingSource]
   protected def sink: BaseStreamingSink
   protected def offsetSeqMetadata: OffsetSeqMetadata
@@ -167,7 +169,8 @@ trait ProgressReporter extends Logging {
         processedRowsPerSecond = numRecords / processingTimeSec
       )
     }
-    val sinkProgress = new SinkProgress(sink.toString)
+
+    val sinkProgress = SinkProgress(sink.toString, sinkCommitProgress.map(_.numOutputRows()))
 
     val newProgress = new StreamingQueryProgress(
       id = id,
